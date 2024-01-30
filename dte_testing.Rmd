@@ -1,0 +1,11 @@
+---
+title: DTE testing framework
+output: html_notebook
+---
+
+```{r}
+library(SummarizedExperiment)
+library(edgeR)
+
+```
+
