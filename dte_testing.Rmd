@@ -6,6 +6,44 @@ output: html_notebook
 ```{r}
 library(SummarizedExperiment)
 library(edgeR)
+library(tximport)
+```
 
+```{r}
+load('sdownstream/rse_tx.swds_gencode28.n24.Rdata')
+r <- load('sdownstream/simulate.rda')
+
+rownames(rse_tx) <- rowData(rse_tx)$transcript_id
+## scale the counts using length
+## from now on we should use these scaledCounts matrix for downstream limma-voom
+scaledCounts <- tximport::makeCountsFromAbundance(assays(rse_tx)$counts, assays(rse_tx)$tpm, assays(rse_tx)$length,
+                                         countsFromAbundance = "lengthScaledTPM")
+#cd <- as.data.frame(colData(rse_tx))
+#cd$Condition <- gsub('^S\\d+_', '', cd$SAMPLE_ID)
+#cd$frag_len_mean <- NULL
+#cd$frag_len_sd <- NULL
+#data.table::setcolorder(cd, c('SAMPLE_ID', 'Condition'))
+cd <- as.data.frame(colData(rse_tx))
+```
+
+
+```{r}
+y <- DGEList(scaledCounts)
+
+# filtering using the design information:
+design <- model.matrix(~Condition, data = cd)
+keep <- filterByExpr(y, design)
+y <- y[keep, ]
+
+# normalize and run voom transformation
+y <- calcNormFactors(y)
+voomres <- voom(y, design)
+# v is now ready for lmFit() see limma User's Guide
+fit = lmFit(voomres)
+eB  = eBayes(fit)
+
+sigDE = topTable(eB, coef='ConditionB', p.value = 1, number=nrow(rse_tx))
+p05 <- subset(sigDE, adj.P.Val<0.005)
+ 
 ```
 
