@@ -24,21 +24,24 @@ scaledCounts <- tximport::makeCountsFromAbundance(assays(rse_tx)$counts, assays(
 #cd$frag_len_mean <- NULL
 #cd$frag_len_sd <- NULL
 #data.table::setcolorder(cd, c('SAMPLE_ID', 'Condition'))
+rse_tx$Condition <- as.factor(rse_tx$Condition)
 cd <- as.data.frame(colData(rse_tx))
 ```
 
 
 ```{r}
-y <- DGEList(scaledCounts)
+dy <- DGEList(scaledCounts)
 
 # filtering using the design information:
 design <- model.matrix(~Condition, data = cd)
-keep <- filterByExpr(y, design)
-y <- y[keep, ]
+## NOTE: using design in filterByExpr INCREASES the tx count
+##      from 36523 to 46123 !
+keep <- filterByExpr(dy, design)
+dy <- dy[keep, ]
 
 # normalize and run voom transformation
-y <- calcNormFactors(y)
-voomres <- voom(y, design)
+dy <- calcNormFactors(dy)
+voomres <- voom(dy, design)
 # v is now ready for lmFit() see limma User's Guide
 fit = lmFit(voomres)
 eB  = eBayes(fit)
@@ -52,6 +55,5 @@ tpr=sprintf('%.2f%%', (nTP*100.00)/nout)
 cat("For FDR < 0.005 we get", nout, "DTEs, of which", nTP, 
     "are True Positives ( TPR =",tpr,")\n")
 ```
-
 
 
