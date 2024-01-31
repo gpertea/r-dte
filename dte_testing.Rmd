@@ -12,6 +12,7 @@ library(tximport)
 ```{r}
 load('sdownstream/rse_tx.swds_gencode28.n24.Rdata')
 r <- load('sdownstream/simulate.rda')
+dtes <- names(iso.dte)[iso.dte] # list of DTEs in the simulation
 
 rownames(rse_tx) <- rowData(rse_tx)$transcript_id
 ## scale the counts using length
@@ -42,8 +43,15 @@ voomres <- voom(y, design)
 fit = lmFit(voomres)
 eB  = eBayes(fit)
 
-sigDE = topTable(eB, coef='ConditionB', p.value = 1, number=nrow(rse_tx))
+sigDE = topTable(eB, coef='ConditionB', p.value = 0.1, number=nrow(rse_tx))
 p05 <- subset(sigDE, adj.P.Val<0.005)
- 
+nout=nrow(p05)
+nTP=nrow(p05[rownames(p05) %in% dtes,])
+## not sure if TPR is calculated this way:
+tpr=sprintf('%.2f%%', (nTP*100.00)/nout)
+cat("For FDR < 0.005 we get", nout, "DTEs, of which", nTP, 
+    "are True Positives ( TPR =",tpr,")\n")
 ```
+
+
 
