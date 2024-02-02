@@ -45,19 +45,19 @@ padj <- data.frame(row.names=rownames(rse_tx))
   })
  padj$limmaVoom <- tt$adj.P.Val[match(rownames(padj), rownames(tt))]
 
- ## limma-voom with more permissive expression filter
+ ## limma-voom with more permissive expression filter (model aware)
  st <- system.time({ 
     tt <- limmavoom.ftx(rse_tx)
   })
  padj$limmaVoomF <- tt$adj.P.Val[match(rownames(padj), rownames(tt))]
 
- ## limma-logTPM - the old LIBD approach, using log(tpm+0.5)
+ ## limma-logTPM - basic approach when counts are not available, using log(tpm+0.5)
  st <- system.time({ 
     tt <- limmalogtpm(rse_tx)
   })
  padj$limmaLogTpm <- tt$adj.P.Val[match(rownames(padj), rownames(tt))]
 
- ## limma-logTPM - the old LIBD approach, using log(tpm+0.5)
+ ## limma-logTPM - same as limma-logTPM but with array weights and trend=T
  st <- system.time({ 
     tt <- limmatrend(rse_tx)
   })
