@@ -23,10 +23,10 @@ if (!file.exists(ftxi) | !file.exists(frawtxi)) {
   files <- file.path('salmon', sample,'quant.sf')
   names(files) <- sample
   txi.raw <- tximport(files,type='salmon', txOut=TRUE, varReduce=TRUE)
-  save(txi.raw, file=ftxi)
+  save(txi.raw, file=frawtxi)
   txi <- tximport(files,type='salmon', txOut=TRUE, 
                   countsFromAbundance="lengthScaledTPM", varReduce=TRUE)
-  save(txi, file=frawtxi)
+  save(txi, file=ftxi)
 }
 ```
 
@@ -49,8 +49,7 @@ source('dte_plots.R')
 
 n=12
 n.sub=12
-
-idx <- c(1:n.sub, n + 1:n.sub)
+idx <- c(1:24)
 
 source("dte_funcs.R")
 ```
@@ -61,58 +60,60 @@ source("dte_funcs.R")
  padj <- data.frame(row.names=rownames(txi$counts))
  ## limma-voom
  st <- system.time({ 
-    tt <- limmavoom(txi$counts[,idx], n.sub)
+    tt <- limmavoom(txi$counts[,idx], n)
   })
  padj$limmaVoom <- tt$adj.P.Val[match(rownames(padj), rownames(tt))]
 
  ## limma-voom with more permissive expression filter
  st <- system.time({ 
-    tt <- limmavoom.ftx(txi$counts[,idx], n.sub)
+    tt <- limmavoom.ftx(txi$counts[,idx], n)
   })
  padj$limmaVoomF <- tt$adj.P.Val[match(rownames(padj), rownames(tt))]
 
  ## limma-logTPM - the old LIBD approach, using log(tpm+0.5)
  st <- system.time({ 
-    tt <- limmalogtpm(txi$abundance[,idx], n.sub)
+    tt <- limmalogtpm(txi$abundance[,idx], n)
   })
  padj$limmaLogTpm <- tt$adj.P.Val[match(rownames(padj), rownames(tt))]
 
  ## limma-logTPM - the old LIBD approach, using log(tpm+0.5)
  st <- system.time({ 
-    tt <- limmatrend(txi$abundance[,idx], n.sub)
+    tt <- limmatrend(txi$abundance[,idx], n)
   })
  padj$limmaTrend <- tt$adj.P.Val[match(rownames(padj), rownames(tt))]
 
  ## edgeR
  st <- system.time({ 
-    tt <- edger(txi$counts[,idx], n.sub)
+    tt <- edger(txi$counts[,idx], n)
   })
  padj$edgeR <- tt$FDR[match(rownames(padj), rownames(tt))]
 
  ## edgeR-QL
- st <- system.time({ 
-    tt <- edgerQL(txi$counts[,idx], n.sub)
+ st <- system.time({
+    tt <- edgerQL(txi$counts[,idx], n)
   })
  padj$edgeR.QL <- tt$FDR[match(rownames(padj), rownames(tt))]
  
  ## DESeq2 
  st <- system.time({
-    res <- deseq2(txi.raw, n.sub)
+    res <- deseq2(txi.raw, n)
   })
  padj$DESeq2 <- res$padj[match(rownames(padj), rownames(res))]
 ```
 
-```{r iCobra}
-  iso.any <- iso.dtu | iso.dte | iso.dge
+```{r iCobra, fig.width=8, fig.height=5}
+iso.any <- iso.dtu | iso.dte | iso.dge
   status <- as.numeric(rownames(padj) %in% names(iso.dtu)[iso.any])
-  cd <- COBRAData(padj=padj,
-                  truth=data.frame(status, row.names=rownames(padj)))
-  pdf(file=paste0("dte_n",n.sub,".pdf"))
-  print(myicobra(cd, "Transcript"))
-  dev.off()
+  cd <- COBRAData(padj=padj,  truth=data.frame(status, row.names=rownames(padj)))
+  #pdf(file=paste0("dte_n",n.sub,".pdf"))
+  print(myicobra(cd, 12, "Transcript"))
+  #dev.off()
+```
 
-  pdf(file=paste0("dte_fdrbkd_",n.sub,".pdf"), width=9)
+
+```{r iCobra2}
+#pdf(file=paste0("dte_fdrbkd_",n,".pdf"), width=9)
   fdrBreakdownTxp(padj, alpha=.05)
-  dev.off()
+  #dev.off()
 ```
 

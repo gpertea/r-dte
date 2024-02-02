@@ -1,0 +1,131 @@
+---
+title: "fix_simulated_counts"
+## output: html_notebook
+---
+
+
+```{r}
+suppressPackageStartupMessages({
+library(SummarizedExperiment)
+library(edgeR)
+library(tximport)
+  })
+load('sdownstream/rse_tx.swds_gencode28.n24.Rdata')
+r <- load('sdownstream/simulate.rda')
+dtes <- names(iso.dte)[iso.dte] # list of DTEs in the simulation
+txi <- assays(rse_tx)
+```
+
+```{r}
+counts_matrix <- txi$counts
+
+# Calculate fold changes for each pair and cap extreme fold changes
+# Add a small constant to avoid division by zero
+small_constant <- 1e-9
+fold_changes <- (counts_matrix[, seq(2, 24, by = 2)] + small_constant) / (counts_matrix[, seq(1, 24, by = 2)] + small_constant)
+logFC <- log2(fold_changes)
+capped_pozFC <- pmin(logFC, logFC_cap)
+cappedFC <- pmax(capped_pozFC, -logFC_cap)
+
+# Calculate the mean and standard deviation for each transcript
+mean_counts <- rowMeans(counts_matrix)
+std_dev_counts <- apply(counts_matrix, 1, sd)
+
+# Define an upper threshold for outliers
+threshold_upper <- mean_counts + (3 * std_dev_counts)
+
+# Identify the outliers in terms of large values
+outliers_upper <- counts_matrix > threshold_upper[row(counts_matrix)]
+
+# Adjust the counts for outliers
+scaling_factor_upper <- threshold_upper[row(counts_matrix)[outliers_upper]] / counts_matrix[outliers_upper]
+adjusted_counts_matrix <- counts_matrix
+adjusted_counts_matrix[outliers_upper] <- counts_matrix[outliers_upper] * scaling_factor_upper
+
+# Apply capped fold changes where necessary, ensuring no NaNs for zero counts
+for (i in seq(1, ncol(counts_matrix), by = 2)) {
+    condition_a <- counts_matrix[, i]
+    condition_b <- counts_matrix[, i + 1]
+
+    # Calculate adjusted fold change, ensuring we don't apply it to zero counts
+    adjustedFC <- 2^cappedFC[, (i + 1) / 2]
+    
+    outliers_a <- outliers_upper[, i]
+    outliers_b <- outliers_upper[, i + 1]
+    non_zero_conditions <- condition_a > 0 & condition_b > 0
+    only_a_outliers <- outliers_a & !outliers_b & non_zero_conditions
+    only_b_outliers <- outliers_b & !outliers_a & non_zero_conditions
+    
+# For rows where only condition_a was an outlier
+    if (any(only_a_outliers)) {
+        adjusted_counts_matrix[only_a_outliers, i + 1] <- condition_a[only_a_outliers] * (adjustedFC[only_a_outliers])
+    }
+    
+    # For rows where only condition_b was an outlier
+    if (any(only_b_outliers)) {
+        adjusted_counts_matrix[only_b_outliers, i] <- condition_b[only_b_outliers] / (adjustedFC[only_b_outliers])
+    }}
+
+# Replace any NaN values in the adjusted matrix with the original counts as a fallback
+ adjusted_counts_matrix[is.nan(adjusted_counts_matrix)] <- counts_matrix[is.nan(adjusted_counts_matrix)]
+# Now 'adjusted_counts_matrix' contains the counts adjusted for outliers
+# preserving the general structure of differential expression but without the extreme outliers
+```
+
+```{r check FC changes}
+# Define the logFC cap value
+logFC_cap <- log2(16)  # Log2 fold change cap (e.g., cap at 16-fold increase which is log2(16) = 4)
+
+original_logFC <- log2((counts_matrix[, seq(2, 24, by = 2)] + small_constant) / (counts_matrix[, seq(1, 24, by = 2)] + small_constant))
+# Calculate capped logFC for the original counts matrix
+original_logFC_capped <- pmin(pmax(log2((counts_matrix[, seq(2, 24, by = 2)] + small_constant) / (counts_matrix[, seq(1, 24, by = 2)] + small_constant)), -logFC_cap), logFC_cap)
+
+# Calculate capped logFC for the adjusted counts matrix
+adjusted_logFC_capped <- pmin(pmax(log2((adjusted_counts_matrix[, seq(2, 24, by = 2)] + small_constant) / (adjusted_counts_matrix[, seq(1, 24, by = 2)] + small_constant)), -logFC_cap), logFC_cap)
+
+# Count the number of sample pairs where the capped logFC does not match
+# We allow a very small numerical tolerance for floating-point comparison
+tolerance <- 1e-3
+differences <- abs(original_logFC_capped - adjusted_logFC_capped) > tolerance
+num_differences <- sum(differences)
+
+num_differences
+```
+```{r}
+calcTPM <- function(counts, lengths) {
+  # Step 1: Calculate RPK
+  # Note: Lengths are in bases, convert to kilobases by dividing by 1000
+  RPK <- counts / (lengths / 1000)
+  # Step 2: Calculate scaling factor
+  # Sum RPK values across all transcripts for each sample
+  scaling_factor <- colSums(RPK)
+  # Step 3: Calculate TPM
+  # Divide RPK by the scaling factor for each sample (to normalize across samples)
+  # Then multiply by 1,000,000 to scale the values to TPM
+  (RPK / scaling_factor) * 1e6
+}
+
+txi$adjtpm <- calcTPM(adjusted_counts_matrix, txi$length)
+adjscCounts <- tximport::makeCountsFromAbundance(adjusted_counts_matrix, txi$adjtpm,
+                          txi$length, countsFromAbundance = "lengthScaledTPM")
+
+```
+
+```{r}
+suppressPackageStartupMessages({
+  library(tximport)
+  library(DESeq2)
+  library(limma)
+  library(edgeR)
+  library(samr)
+  library(iCOBRA)
+  library(ggplot2)
+})
+
+source('dte_plots.R')
+n=12
+idx <- c(1:24)
+source('dte_funcs.R')
+
+```
+

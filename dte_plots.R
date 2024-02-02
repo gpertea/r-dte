@@ -1,14 +1,15 @@
 rgb2 <- function(x,y,z) rgb(x,y,z,maxColorValue=255)
+
 cols <- c("DESeq2"="black",
+          "edgeR"=rgb2(60,190,110),
+          "edgeR.QL"=rgb2(0,148,80),
+          "limmaVoom"=rgb2(204,121,167),
+          "limmaVoomF"=rgb2(220,94,110), # filter by expression uses design => more permissive
           "limmaLogTpm"=rgb2(230,159,0),
-          "edgeR"=rgb2(86,180,233),
-          "edgeR.QL"=rgb2(0,158,115),
-          "limmaVoom"=rgb2(0,114,178),
-          "limmaVoomF"=rgb2(213,94,0), # filter by expression uses design => more permissive
-          "limmaTrend"=rgb2(204,121,167)
+          "limmaTrend"=rgb2(170,122,62)
           )
 
-myicobra <- function(cd, lvl="Gene", label=FALSE, zoom=FALSE) {
+myicobra <- function(cd, n.sub=12, lvl="Gene", label=FALSE, zoom=FALSE) {
   if (zoom) {
     cd@padj$sleuth <- NULL
   }

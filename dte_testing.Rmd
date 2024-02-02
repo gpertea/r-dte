@@ -4,32 +4,126 @@ output: html_notebook
 ---
 
 ```{r}
-library(SummarizedExperiment)
-library(edgeR)
-library(tximport)
+suppressPackageStartupMessages({
+  library(tximport)
+  library(DESeq2)
+  library(limma)
+  library(edgeR)
+  library(samr)
+  library(iCOBRA)
+  library(ggplot2)
+})
 ```
 
 ```{r}
 load('sdownstream/rse_tx.swds_gencode28.n24.Rdata')
 r <- load('sdownstream/simulate.rda')
 dtes <- names(iso.dte)[iso.dte] # list of DTEs in the simulation
-
-rownames(rse_tx) <- rowData(rse_tx)$transcript_id
-## scale the counts using length
-## from now on we should use these scaledCounts matrix for downstream limma-voom
-scaledCounts <- tximport::makeCountsFromAbundance(assays(rse_tx)$counts, assays(rse_tx)$tpm, assays(rse_tx)$length,
-                                         countsFromAbundance = "lengthScaledTPM")
+rse_tx$Condition=as.factor(rse_tx$Condition)
+## scale the counts base on tpms and transcript effective length matrices
+## from now on we use these scaledCounts matrix for limma-voom
+assays(rse_tx)$scaledCounts <- tximport::makeCountsFromAbundance(assays(rse_tx)$counts, assays(rse_tx)$tpm,
+                          assays(rse_tx)$length, countsFromAbundance = "lengthScaledTPM")
+#tpm <- assay(rse_tx)$tpm
 #cd <- as.data.frame(colData(rse_tx))
-#cd$Condition <- gsub('^S\\d+_', '', cd$SAMPLE_ID)
-#cd$frag_len_mean <- NULL
-#cd$frag_len_sd <- NULL
-#data.table::setcolorder(cd, c('SAMPLE_ID', 'Condition'))
-rse_tx$Condition <- as.factor(rse_tx$Condition)
-cd <- as.data.frame(colData(rse_tx))
 ```
 
 
 ```{r}
+#n=12
+#idx <- c(1:24)
+source('dte_plots.R')
+source('dte_funcs_rse.R')
+```
+
+
+```{r}
+padj <- data.frame(row.names=rownames(rse_tx))
+ ## limma-voom
+ st <- system.time({ 
+    tt <- limmavoom(rse_tx)
+  })
+ padj$limmaVoom <- tt$adj.P.Val[match(rownames(padj), rownames(tt))]
+
+ ## limma-voom with more permissive expression filter
+ st <- system.time({ 
+    tt <- limmavoom.ftx(rse_tx)
+  })
+ padj$limmaVoomF <- tt$adj.P.Val[match(rownames(padj), rownames(tt))]
+
+ ## limma-logTPM - the old LIBD approach, using log(tpm+0.5)
+ st <- system.time({ 
+    tt <- limmalogtpm(rse_tx)
+  })
+ padj$limmaLogTpm <- tt$adj.P.Val[match(rownames(padj), rownames(tt))]
+
+ ## limma-logTPM - the old LIBD approach, using log(tpm+0.5)
+ st <- system.time({ 
+    tt <- limmatrend(rse_tx)
+  })
+ padj$limmaTrend <- tt$adj.P.Val[match(rownames(padj), rownames(tt))]
+
+ ## edgeR
+ st <- system.time({ 
+    tt <- edger(rse_tx)
+  })
+ padj$edgeR <- tt$FDR[match(rownames(padj), rownames(tt))]
+
+ ## edgeR-QL
+ st <- system.time({ 
+    tt <- edgerQL(rse_tx)
+  })
+ padj$edgeR.QL <- tt$FDR[match(rownames(padj), rownames(tt))]
+ 
+ ## DESeq2 
+ st <- system.time({
+    res <- deseq2(rse_tx)
+  })
+ padj$DESeq2 <- res$padj[match(rownames(padj), rownames(res))]
+```
+
+
+```{r iCobra, fig.width=8, fig.height=5}
+  iso.any <- iso.dtu | iso.dte | iso.dge
+  status <- as.numeric(rownames(padj) %in% names(iso.dtu)[iso.any])
+  cd <- COBRAData(padj=padj,
+                  truth=data.frame(status, row.names=rownames(padj)))
+  #pdf(file=paste0("dte_n",n.sub,".pdf"))
+  print(myicobra(cd, ncol(rse_tx)/2, "Transcript"))
+  #dev.off()
+
+  #pdf(file=paste0("dte_fdrbkd_",n.sub,".pdf"), width=9)
+  #fdrBreakdownTxp(padj, alpha=.05)
+  #dev.off()
+```
+
+
+```{r}
+library(EnhancedVolcano)
+
+showVolcano <- function(deTx, title) {
+  EnhancedVolcano(deTx,
+                    lab = rownames(deTx),
+                            x = 'logFC',
+                            y = 'adj.P.Val',
+                            pCutoff = 0.05,
+                            FCcutoff = 1,
+                            title = title)
+}
+
+showVolcano(padj$limmaTrend, 'limmaTrend')
+
+```
+
+
+
+
+
+
+
+### ----------------- testing 
+
+```{r SKIP}
 dy <- DGEList(scaledCounts)
 
 # filtering using the design information:
